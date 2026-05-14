@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小学生心理测评系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root { --primary: #4A90D9; --bg: #f0f4f8; --card-bg: #fff; --text: #333; --border: #e0e6ed; }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: 'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; background:var(--bg); min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+        .container { width:100%; max-width:800px; background:var(--card-bg); border-radius:20px; box-shadow:0 2px 12px rgba(0,0,0,0.08); overflow:hidden; }
+        .container.wide { max-width:1100px; }
+        .header { background:linear-gradient(135deg,#5B8FF9,#4A90D9); color:#fff; padding:22px 30px; text-align:center; }
+        .header.teacher-header { background:linear-gradient(135deg,#f6bd16,#e8a810); }
+        .header h1 { font-size:1.6em; }
+        .body-content { padding:28px 30px; max-height:70vh; overflow-y:auto; }
+        .entry-select { display:flex; gap:20px; justify-content:center; flex-wrap:wrap; padding:20px 0; }
+        .entry-card { flex:1; min-width:180px; max-width:260px; border:2px solid var(--border); border-radius:16px; padding:30px 20px; text-align:center; cursor:pointer; background:#fafbfc; transition:0.3s; }
+        .entry-card:hover { transform:translateY(-3px); border-color:#5B8FF9; }
+        .form-group { margin-bottom:18px; }
+        .form-group label { display:block; font-weight:600; margin-bottom:6px; }
+        .form-group input,.form-group select { width:100%; padding:12px 16px; border:2px solid var(--border); border-radius:10px; font-size:1em; }
+        .btn { padding:12px 28px; border:none; border-radius:10px; font-size:1em; font-weight:600; cursor:pointer; transition:0.3s; }
+        .btn-primary { background:#5B8FF9; color:#fff; width:100%; }
+        .btn-teacher { background:#F6BD16; color:#fff; width:100%; }
+        .btn-outline { background:#fff; color:#5B8FF9; border:2px solid #5B8FF9; }
+        .btn-sm { padding:7px 16px; font-size:0.85em; }
+        .btn-back { background:#f0f0f0; color:#555; }
+        .btn-danger { background:#ff4d4f; color:#fff; }
+        .progress-wrap { margin-bottom:20px; background:#eef2f7; border-radius:20px; height:10px; overflow:hidden; }
+        .progress-bar { height:100%; background:#5B8FF9; border-radius:20px; }
+        .question-block { background:#fafcfd; border:1px solid #eef2f7; border-radius:10px; padding:16px 18px; margin-bottom:12px; }
+        .q-num { display:inline-block; background:#5B8FF9; color:#fff; width:26px; height:26px; border-radius:50%; text-align:center; line-height:26px; margin-right:10px; }
+        .options { display:flex; gap:10px; margin-top:10px; flex-wrap:wrap; }
+        .options label { display:flex; align-items:center; gap:5px; cursor:pointer; padding:7px 14px; border:2px solid #e8ecf1; border-radius:20px; background:#fff; }
+        .options label:has(input:checked) { border-color:#5B8FF9; background:#eef5ff; }
+        table { width:100%; border-collapse:collapse; font-size:0.9em; }
+        th,td { padding:10px 12px; border-bottom:1px solid #eef2f7; text-align:center; }
+        th { background:#f8fafc; font-weight:700; }
+        .badge-status { padding:4px 10px; border-radius:12px; font-size:0.78em; font-weight:600; }
+        .badge-good { background:#e6f7e6; color:#389e0d; }
+        .badge-normal { background:#fffbe6; color:#d48806; }
+        .badge-attention { background:#fff1f0; color:#cf1322; }
+        .analysis-panel { background:#fdfdff; border:2px solid #e8ecf1; border-radius:14px; padding:20px; margin-top:16px; display:none; }
+        .analysis-panel.active { display:block; }
+        .dimension-row { display:flex; align-items:center; gap:10px; padding:10px 14px; background:#fafcfd; border-radius:8px; margin:6px 0; }
+        .toast { position:fixed; top:20px; left:50%; transform:translateX(-50%); z-index:9999; padding:12px 24px; border-radius:25px; font-weight:600; color:#fff; }
+        .toast-success { background:#52c41a; }
+        .toast-error { background:#ff4d4f; }
+        .toast-warning { background:#faad14; }
+        .summary-box { background:#fffef5; border-left:4px solid #F6BD16; padding:14px 18px; border-radius:8px; margin-top:14px; }
+        .teacher-hint { background:#e6f7ff; border-left:4px solid #1890ff; padding:12px 16px; margin:10px 0; border-radius:4px; }
+    </style>
+</head>
+<body>
+    <div class="container" id="mainContainer">正在加载系统...</div>
+    <div id="toastContainer"></div>
+
+    <script>
+        if (typeof window.supabase === 'undefined') {
+            document.getElementById('mainContainer').innerHTML = '<div class="header" style="background:#ff4d4f;"><h1>⚠ 加载失败</h1><p>Supabase SDK 未加载，请检查网络连接</p></div>';
+            throw new Error('SDK not loaded');
+        }
+
+        const SUPABASE_URL = 'https://eaxveowlmpuiqctjiqqv.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVheHZlb3dsbXB1aXFjdGppcXF2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg3NDUyNzMsImV4cCI6MjA5NDMyMTI3M30.heTL9ICZCTwS-ThKEq9_jhOvWBSNrBZ_aaFH3VH1t78';
+        const TEACHER_ACCOUNT = 'tszxx';
+        const TEACHER_PASSWORD = 'tszxx123';
+
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const gradeClassMap = {
+            '三年级': ['233', '234', '235'],
+            '四年级': ['230', '231', '232'],
+            '五年级': ['226', '228', '229'],
+            '六年级': ['222', '223', '224', '225']
+        };
+
+        // 题目已进行精准化描述
+        const questions = [
+            { id:1, text:'最近一周，我感到心情愉快、放松', dim:'情绪状态', rev:true },
+            { id:2, text:'我无缘无故感到害怕或紧张', dim:'情绪状态', rev:false },
+            { id:3, text:'我会因为一些小事反复担心', dim:'情绪状态', rev:false },
+            { id:4, text:'我容易对同学或家人发脾气', dim:'情绪状态', rev:false },
+            { id:5, text:'我觉得自己很孤单，没人愿意和我玩', dim:'情绪状态', rev:false },
+            { id:6, text:'我经常想哭或觉得闷闷不乐', dim:'情绪状态', rev:false },
+            { id:7, text:'我对以前喜欢的事情现在提不起兴趣', dim:'情绪状态', rev:false },
+            { id:8, text:'我早上起来仍然感觉很累，没精神', dim:'情绪状态', rev:false },
+            { id:9, text:'我晚上能很快入睡，并且睡得安稳', dim:'情绪状态', rev:true },
+            { id:10, text:'我吃饭很香，胃口正常', dim:'情绪状态', rev:true },
+            { id:11, text:'我常常担心会发生不好的事情', dim:'情绪状态', rev:false },
+            { id:12, text:'生气或难过时，我能较快让自己平静下来', dim:'情绪状态', rev:true },
+            { id:13, text:'课间或活动时，我喜欢和同学们一起玩', dim:'社交能力', rev:true },
+            { id:14, text:'在班里有可以说心里话的好朋友', dim:'社交能力', rev:true },
+            { id:15, text:'我和大多数同学都能友好相处', dim:'社交能力', rev:true },
+            { id:16, text:'我害怕主动和不认识的同学说话', dim:'社交能力', rev:false },
+            { id:17, text:'有同学故意推我、嘲笑我或给我起外号', dim:'社交能力', rev:false },
+            { id:18, text:'看到同学有困难，我愿意主动帮忙', dim:'社交能力', rev:true },
+            { id:19, text:'集体活动（如运动会、大扫除）我愿意积极参加', dim:'社交能力', rev:true },
+            { id:20, text:'我觉得班里的同学是喜欢我的', dim:'社交能力', rev:true },
+            { id:21, text:'遇到老师或同学，我会主动打招呼', dim:'社交能力', rev:true },
+            { id:22, text:'和同学吵架后，我会尝试主动和好', dim:'社交能力', rev:true },
+            { id:23, text:'我觉得自己在学校被孤立或被排斥', dim:'社交能力', rev:false },
+            { id:24, text:'我愿意把自己的文具或零食分享给同学', dim:'社交能力', rev:true },
+            { id:25, text:'每天早晨，我期待去学校上学', dim:'学习适应', rev:true },
+            { id:26, text:'学习新知识时，我觉得很有趣', dim:'学习适应', rev:true },
+            { id:27, text:'上课时我能专心听讲，不走神', dim:'学习适应', rev:true },
+            { id:28, text:'我每天都能按时完成老师布置的作业', dim:'学习适应', rev:true },
+            { id:29, text:'我觉得最近的学习任务太多了，压力很大', dim:'学习适应', rev:false },
+            { id:30, text:'考试前我会紧张到睡不着或肚子疼', dim:'学习适应', rev:false },
+            { id:31, text:'我对现在的学习成绩感到满意', dim:'学习适应', rev:true },
+            { id:32, text:'不会做的题目，我会主动请教老师或同学', dim:'学习适应', rev:true },
+            { id:33, text:'空闲时间，我喜欢阅读课外书', dim:'学习适应', rev:true },
+            { id:34, text:'我觉得班主任或其他老师是关心我的', dim:'学习适应', rev:true },
+            { id:35, text:'我能一整节课都认真听讲，不玩东西', dim:'学习适应', rev:true },
+            { id:36, text:'总体来说，学习让我感到快乐和充实', dim:'学习适应', rev:true },
+            { id:37, text:'我觉得自己是个不错的孩子', dim:'自信心', rev:true },
+            { id:38, text:'面对新任务，我相信自己可以做好', dim:'自信心', rev:true },
+            { id:39, text:'上课时我敢于举手回答问题', dim:'自信心', rev:true },
+            { id:40, text:'我满意自己的长相和身高', dim:'自信心', rev:true },
+            { id:41, text:'我经常觉得其他同学都比我厉害', dim:'自信心', rev:false },
+            { id:42, text:'遇到困难时，我不会轻易放弃', dim:'自信心', rev:true },
+            { id:43, text:'我愿意尝试从来没做过的事情', dim:'自信心', rev:true },
+            { id:44, text:'我能说出自己身上的三个优点', dim:'自信心', rev:true },
+            { id:45, text:'每天早上我都能按时起床，不赖床', dim:'行为习惯', rev:true },
+            { id:46, text:'我的书包和房间通常能自己整理好', dim:'行为习惯', rev:true },
+            { id:47, text:'放学后我会参加体育活动或到户外玩耍', dim:'行为习惯', rev:true },
+            { id:48, text:'在学校我能遵守课堂和课间纪律', dim:'行为习惯', rev:true },
+            { id:49, text:'我从来没有动手打过同学', dim:'行为习惯', rev:true },
+            { id:50, text:'我每天睡眠时间充足（小学生建议9-11小时）', dim:'行为习惯', rev:true }
+        ];
+
+        let student = { studentId:'', name:'', grade:'', className:'', gender:'' };
+        let answers = {};
+        let page = 1;
+        const totalPages = 5;
+        const perPage = 10;
+
+        function toast(msg, type='success') {
+            const t = document.createElement('div'); t.className = `toast toast-${type}`; t.textContent = msg;
+            document.getElementById('toastContainer').appendChild(t);
+            setTimeout(() => t.remove(), 3000);
+        }
+
+        // 姓名简单校验：必须是2-4个汉字，不能包含数字、字母或乱码
+        function isValidName(name) {
+            if (!name || name.length < 2 || name.length > 4) return false;
+            return /^[\u4e00-\u9fa5]{2,4}$/.test(name);
+        }
+
+        // 学号校验：必须为纯数字，长度4-10位
+        function isValidStudentId(sid) {
+            return /^\d{4,10}$/.test(sid);
+        }
+
+        function adjScore(raw, rev) { return rev ? 5 - raw : raw; }
+
+        function analyze(answers) {
+            const dims = {};
+            questions.forEach((q,i) => {
+                const raw = answers[i];
+                if (raw == null) return;
+                const adj = adjScore(raw, q.rev);
+                if (!dims[q.dim]) dims[q.dim] = { total:0, count:0 };
+                dims[q.dim].total += adj;
+                dims[q.dim].count++;
+            });
+            const results = {};
+            let ot=0, oc=0;
+            for (let [d,v] of Object.entries(dims)) {
+                const avg = v.total/v.count;
+                let level, cls;
+                if (avg<=1.5) { level='良好'; cls='badge-good'; }
+                else if (avg<=2.5) { level='一般'; cls='badge-normal'; }
+                else if (avg<=3.2) { level='需要关注'; cls='badge-attention'; }
+                else { level='亟需帮助'; cls='badge-attention'; }
+                results[d] = { avg:avg.toFixed(2), level, colorClass:cls };
+                ot += v.total; oc += v.count;
+            }
+            const oavg = oc>0 ? (ot/oc).toFixed(2) : '0';
+            let otext, hintLevel;
+            if (oavg<=1.5) { otext='整体心理状态良好，未见明显情绪或行为问题。'; hintLevel='info'; }
+            else if (oavg<=2.5) { otext='整体心理状态一般，部分维度需适当关注，建议日常多沟通。'; hintLevel='warning'; }
+            else if (oavg<=3.2) { otext='整体心理状态需重点关注，请班主任或心理老师尽早介入了解。'; hintLevel='danger'; }
+            else { otext='整体心理状态亮起红灯，建议立即联系学校心理辅导室进行专业评估。'; hintLevel='danger'; }
+
+            // 生成分维度提示
+            const dimHints = [];
+            for (let [d, v] of Object.entries(results)) {
+                if (v.level === '需要关注' || v.level === '亟需帮助') {
+                    dimHints.push(`${d}维度得分偏高，可能存在一定困扰。`);
+                }
+            }
+            return { results, overallAvg:oavg, overallLevel:otext, hintLevel, dimHints };
+        }
+
+        async function submit() {
+            const { error } = await supabaseClient.from('records').insert([{
+                student_id: student.studentId,
+                student_name: student.name,
+                grade: student.grade,
+                class_name: student.className,
+                gender: student.gender,
+                answers: answers
+            }]);
+            if (error) throw error;
+        }
+
+        async function fetchRecords() {
+            const { data, error } = await supabaseClient.from('records').select('*').order('created_at', { ascending: false });
+            if (error) throw error;
+            return data;
+        }
+
+        async function delRecord(id) {
+            const { error } = await supabaseClient.from('records').delete().eq('id', id);
+            if (error) throw error;
+        }
+
+        async function delAll() {
+            const { error } = await supabaseClient.from('records').delete().neq('id', 0);
+            if (error) throw error;
+        }
+
+        function renderEntry() {
+            document.getElementById('mainContainer').innerHTML = `
+                <div class="header"><h1>🌈 小学生心理测评系统</h1><div class="subtitle">关爱心灵 · 健康成长</div></div>
+                <div class="body-content">
+                    <div class="entry-select">
+                        <div class="entry-card" id="studentEntry"><div class="icon">👦👧</div><b>学生入口</b></div>
+                        <div class="entry-card teacher-card" id="teacherEntry"><div class="icon">👩‍🏫👨‍🏫</div><b>教师入口</b></div>
+                    </div>
+                </div>`;
+            document.getElementById('studentEntry').onclick = renderStudentLogin;
+            document.getElementById('teacherEntry').onclick = renderTeacherLogin;
+        }
+
+        function renderStudentLogin() {
+            document.getElementById('mainContainer').innerHTML = `
+                <div class="header"><h1>📝 学生信息</h1></div>
+                <div class="body-content">
+                    <div class="form-group"><label>学号</label><input id="studentId" placeholder="请输入学号（4-10位数字）"></div>
+                    <div class="form-group"><label>姓名</label><input id="name" placeholder="请输入真实中文姓名（2-4个字）"></div>
+                    <div class="form-group"><label>年级</label><select id="grade"><option value="">请选择</option>${Object.keys(gradeClassMap).map(g=>`<option>${g}</option>`).join('')}</select></div>
+                    <div class="form-group"><label>班级</label><select id="class"><option>请先选年级</option></select></div>
+                    <div class="form-group"><label>性别</label><select id="gender"><option value="">请选择</option><option>男</option><option>女</option></select></div>
+                    <button class="btn btn-primary" id="startBtn">开始答题</button>
+                    <button class="btn btn-back btn-sm" id="backBtn">返回</button>
+                </div>`;
+            document.getElementById('grade').onchange = function() {
+                const c = document.getElementById('class');
+                c.innerHTML = '<option>请选择</option>';
+                const g = this.value;
+                if (gradeClassMap[g]) gradeClassMap[g].forEach(cls => c.innerHTML += `<option>${cls}</option>`);
+            };
+            document.getElementById('startBtn').onclick = () => {
+                const sid = document.getElementById('studentId').value.trim();
+                const n = document.getElementById('name').value.trim();
+                const g = document.getElementById('grade').value;
+                const c = document.getElementById('class').value;
+                const gen = document.getElementById('gender').value;
+                if (!sid) { toast('请输入学号','error'); return; }
+                if (!isValidStudentId(sid)) { toast('学号格式不正确，应为4-10位数字','error'); return; }
+                if (!isValidName(n)) { toast('请填写真实中文姓名（2-4个汉字）','error'); return; }
+                if (!g || !c || c==='请选择' || !gen) { toast('请完整填写年级、班级、性别','error'); return; }
+                student = { studentId:sid, name:n, grade:g, className:c, gender:gen };
+                answers = {}; page = 1;
+                renderQuiz();
+            };
+            document.getElementById('backBtn').onclick = renderEntry;
+        }
+
+        function renderQuiz() {
+            const start = (page-1)*perPage, end = Math.min(start+perPage, questions.length);
+            const qs = questions.slice(start, end);
+            let html = '';
+            qs.forEach((q,i) => {
+                const idx = start+i, sel = answers[idx];
+                html += `<div class="question-block"><span class="q-num">${q.id}</span>${q.text}
+                    <div class="options">
+                        <label><input type="radio" name="q${idx}" value="1" ${sel===1?'checked':''}>从不</label>
+                        <label><input type="radio" name="q${idx}" value="2" ${sel===2?'checked':''}>偶尔</label>
+                        <label><input type="radio" name="q${idx}" value="3" ${sel===3?'checked':''}>经常</label>
+                        <label><input type="radio" name="q${idx}" value="4" ${sel===4?'checked':''}>总是</label>
+                    </div></div>`;
+            });
+            document.getElementById('mainContainer').innerHTML = `
+                <div class="header"><h1>📋 心理测评问卷</h1><div class="subtitle">${page}/${totalPages}页</div></div>
+                <div class="body-content">
+                    <div class="progress-wrap"><div class="progress-bar" style="width:${(page/totalPages)*100}%"></div></div>
+                    ${html}
+                    <div style="display:flex;gap:10px;justify-content:center;margin-top:20px;">
+                        ${page>1?'<button class="btn btn-outline btn-sm" id="prevBtn">上一页</button>':''}
+                        ${page<totalPages?'<button class="btn btn-primary btn-sm" id="nextBtn">下一页</button>':''}
+                        ${page===totalPages?'<button class="btn btn-primary btn-sm" id="submitBtn">提交答卷</button>':''}
+                    </div>
+                </div>`;
+            function save() { document.querySelectorAll('input[type="radio"]:checked').forEach(r => { answers[parseInt(r.name.replace('q',''))] = parseInt(r.value); }); }
+            if (page>1) document.getElementById('prevBtn').onclick = () => { save(); page--; renderQuiz(); };
+            if (page<totalPages) document.getElementById('nextBtn').onclick = () => { save(); for (let i=start;i<end;i++) if (answers[i]==null) { toast('请答完本页','error'); return; } page++; renderQuiz(); };
+            if (page===totalPages) document.getElementById('submitBtn').onclick = async () => {
+                save();
+                for (let i=0;i<questions.length;i++) if (answers[i]==null) { toast(`第${i+1}题未答`,'error'); return; }
+                try {
+                    await submit();
+                    // 提交成功，不提示数据已存储，只显示感谢参与
+                    document.getElementById('mainContainer').innerHTML = `<div class="header"><h1>🎉 提交成功</h1></div><div class="body-content" style="text-align:center;"><div style="font-size:4em;">✅</div><p>感谢你的参与！</p><button class="btn btn-primary" id="doneBtn">返回首页</button></div>`;
+                    document.getElementById('doneBtn').onclick = renderEntry;
+                } catch(e) { toast('提交失败：'+e.message,'error'); }
+            };
+        }
+
+        function renderTeacherLogin() {
+            document.getElementById('mainContainer').innerHTML = `
+                <div class="header teacher-header"><h1>🔐 教师登录</h1></div>
+                <div class="body-content">
+                    <div class="form-group"><label>账号</label><input id="acc"></div>
+                    <div class="form-group"><label>密码</label><input type="password" id="pwd"></div>
+                    <button class="btn btn-teacher" id="loginBtn">登录</button>
+                    <button class="btn btn-back btn-sm" id="backBtn2">返回</button>
+                </div>`;
+            document.getElementById('loginBtn').onclick = () => {
+                if (document.getElementById('acc').value === TEACHER_ACCOUNT && document.getElementById('pwd').value === TEACHER_PASSWORD) {
+                    renderDashboard();
+                } else {
+                    document.getElementById('pwd').value = '';
+                    document.getElementById('acc').value = '';
+                }
+            };
+            document.getElementById('backBtn2').onclick = renderEntry;
+        }
+
+        async function renderDashboard(filterClass = '') {
+            document.getElementById('mainContainer').innerHTML = `<div class="header teacher-header"><h1>📊 教师管理端</h1></div><div class="body-content">加载中...</div>`;
+            try {
+                const allRecords = await fetchRecords();
+                // 生成班级列表用于筛选
+                const classSet = new Set(allRecords.map(r => `${r.grade}${r.class_name}班`));
+                const classList = [...classSet].sort();
+
+                // 根据筛选条件过滤
+                let records = allRecords;
+                if (filterClass) {
+                    records = allRecords.filter(r => `${r.grade}${r.class_name}班` === filterClass);
+                }
+
+                let rows = '';
+                records.forEach((r,i) => {
+                    const a = analyze(r.answers);
+                    rows += `<tr><td>${i+1}</td><td>${r.student_id || ''}</td><td>${r.student_name}</td><td>${r.grade}</td><td>${r.class_name}</td><td>${r.gender}</td><td>${new Date(r.created_at).toLocaleString()}</td><td><span class="badge-status ${a.hintLevel==='danger'?'badge-attention':a.hintLevel==='warning'?'badge-normal':'badge-good'}">${a.overallAvg}分</span></td><td><button class="btn btn-outline btn-sm detailBtn" data-id="${r.id}">详情</button><button class="btn btn-danger btn-sm delBtn" data-id="${r.id}">删除</button></td></tr>`;
+                });
+
+                const filterOptions = classList.map(c => `<option value="${c}" ${filterClass===c?'selected':''}>${c}</option>`).join('');
+
+                document.getElementById('mainContainer').classList.add('wide');
+                document.getElementById('mainContainer').innerHTML = `
+                    <div class="header teacher-header"><h1>📊 教师管理端</h1><div class="subtitle">共 ${records.length} 条记录</div></div>
+                    <div class="body-content">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap;">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <label style="font-weight:600;">筛选班级：</label>
+                                <select id="classFilter" style="padding:6px 12px; border-radius:6px; border:1px solid #ccc;">
+                                    <option value="">全部班级</option>
+                                    ${filterOptions}
+                                </select>
+                            </div>
+                            <div>
+                                <button class="btn btn-danger btn-sm" id="clearAllBtn">清空全部</button>
+                            </div>
+                        </div>
+                        <table><thead><tr><th>#</th><th>学号</th><th>姓名</th><th>年级</th><th>班级</th><th>性别</th><th>时间</th><th>评分</th><th>操作</th></tr></thead><tbody>${rows||'<tr><td colspan="9">暂无数据</td></tr>'}</tbody></table>
+                        <div id="analysisPanel" class="analysis-panel"></div>
+                        <button class="btn btn-back btn-sm" id="logoutBtn">退出</button>
+                    </div>`;
+
+                document.getElementById('classFilter').onchange = function() {
+                    renderDashboard(this.value);
+                };
+
+                document.querySelectorAll('.detailBtn').forEach(b => b.onclick = () => {
+                    const rec = records.find(r => r.id === parseInt(b.dataset.id));
+                    if (rec) showAnalysis(rec);
+                });
+                document.querySelectorAll('.delBtn').forEach(b => b.onclick = async () => {
+                    if (!confirm('确定删除？')) return;
+                    await delRecord(parseInt(b.dataset.id));
+                    toast('已删除');
+                    renderDashboard(document.getElementById('classFilter')?.value || '');
+                });
+                document.getElementById('clearAllBtn').onclick = async () => {
+                    if (!confirm('清空全部数据？')) return;
+                    await delAll();
+                    toast('已清空');
+                    renderDashboard();
+                };
+                document.getElementById('logoutBtn').onclick = renderEntry;
+            } catch(e) {
+                document.getElementById('mainContainer').innerHTML += `<p style="color:red;">数据库错误：${e.message}</p>`;
+            }
+        }
+
+        function showAnalysis(rec) {
+            const a = analyze(rec.answers);
+            let dims = '';
+            const colors = {'情绪状态':'#5B8FF9','社交能力':'#52c41a','学习适应':'#faad14','自信心':'#ff7a45','行为习惯':'#722ed1'};
+            for (let [d,v] of Object.entries(a.results)) {
+                dims += `<div class="dimension-row"><span style="font-weight:600;">${d}</span><span style="font-weight:700;color:${colors[d]}">${v.avg}分</span><span class="badge-status ${v.colorClass}">${v.level}</span></div>`;
+            }
+            let hintHTML = '';
+            if (a.dimHints.length > 0) {
+                hintHTML = '<div class="teacher-hint"><strong>⚠ 教师提示：</strong><ul>' + a.dimHints.map(h => `<li>${h}</li>`).join('') + '</ul></div>';
+            } else {
+                hintHTML = '<div class="teacher-hint" style="background:#f6ffed;border-left-color:#52c41a;"><strong>✅ 该生各维度均在正常范围。</strong></div>';
+            }
+
+            document.getElementById('analysisPanel').innerHTML = `
+                <h3>${rec.student_name} (学号:${rec.student_id || '无'}) | ${rec.grade}${rec.class_name}班 | ${rec.gender}</h3>
+                <p>综合评分：<b>${a.overallAvg}</b> 分</p>
+                <div class="summary-box" style="background:${a.hintLevel==='danger'?'#fff1f0':a.hintLevel==='warning'?'#fffbe6':'#f6ffed'}">
+                    <strong>综合评估：</strong>${a.overallLevel}
+                </div>
+                ${hintHTML}
+                <h4 style="margin-top:14px;">各维度分析</h4>
+                ${dims}
+                <details style="margin-top:12px;"><summary>查看原始答案</summary>${questions.map((q,i) => `${q.id}. ${q.text} → <b>${['','从不','偶尔','经常','总是'][rec.answers[i]]||'未答'}</b>`).join('<br>')}</details>`;
+            document.getElementById('analysisPanel').classList.add('active');
+        }
+
+        renderEntry();
+    </script>
+</body>
+</html>
